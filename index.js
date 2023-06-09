@@ -26,7 +26,7 @@ async function run() {
 
     const classesCollection = client.db("martialDb").collection("classes");
     app.get('/classes', async (req, res) => {
-      const result = await classesCollection.find().toArray();
+        const result = await classesCollection.find().sort({ enrollmentCount: -1 }).limit(6).toArray();
       res.send(result);
     });
 
