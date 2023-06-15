@@ -47,6 +47,7 @@ async function run() {
     const usersCollection = client.db("martialDb").collection("users")
     const instructorsCollection = client.db("martialDb").collection("instructors");
     const cartsCollection = client.db("martialDb").collection("carts");
+    const paymentsCollection = client.db("martialDb").collection("payments");
 
     app.post('/jwt', (req, res) => {
       const user = req.body;
@@ -56,15 +57,15 @@ async function run() {
     })
 
 
-const verifyAdmin = async(req,res,next) =>{
-  const email = req.decoded.email
-  const query = {email: email}
-  const user = await usersCollection.findOne(query);
-  if(user?.role !== 'admin'){
-    return res.status(403).send({ error: true, message: 'Forbidden access' })
-  }
-  next();
-}
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.decoded.email
+      const query = { email: email }
+      const user = await usersCollection.findOne(query);
+      if (user?.role !== 'admin') {
+        return res.status(403).send({ error: true, message: 'Forbidden access' })
+      }
+      next();
+    }
 
 
     app.get('/classes', async (req, res) => {
@@ -124,32 +125,32 @@ const verifyAdmin = async(req,res,next) =>{
       res.send(result);
     });
 
-// admin-secure
+    // admin-secure
 
     app.get('/users/admin/:email', verifyJWT, async (req, res) => {
       const email = req.params.email;
-    
+
       if (req.decoded.email !== email) {
         res.send({ admin: false });
         return;
       }
-    
+
       const query = { email: email };
       const user = await usersCollection.findOne(query);
       const result = { admin: user?.role === 'admin' };
       res.send(result);
     });
 
-// instructor-secure
+    // instructor-secure
 
     app.get('/users/instructor/:email', verifyJWT, async (req, res) => {
       const email = req.params.email;
-    
+
       if (req.decoded.email !== email) {
         res.send({ instructor: false });
         return;
       }
-    
+
       const query = { email: email };
       const user = await usersCollection.findOne(query);
       const result = { instructor: user?.role === 'instructor' };
@@ -161,18 +162,18 @@ const verifyAdmin = async(req,res,next) =>{
 
     app.get('/users/student/:email', verifyJWT, async (req, res) => {
       const email = req.params.email;
-    
+
       if (req.decoded.email !== email) {
         res.send({ student: false });
         return;
       }
-    
+
       const query = { email: email };
       const user = await usersCollection.findOne(query);
       const result = { student: user?.role === 'student' };
       res.send(result);
     });
-    
+
 
 
     app.get('/users', verifyJWT, verifyAdmin, async (req, res) => {
@@ -234,30 +235,30 @@ const verifyAdmin = async(req,res,next) =>{
 
     app.get("/selectedClasses", verifyJWT, async (req, res) => {
       const userEmail = req.query.email;
-    if (!userEmail){
-      res.send([])
-    }
-    
-        const decodedEmail = req.decoded.email
-    
-        if (userEmail !== decodedEmail) {
-          return res.status(403).send({ error: true, message: 'Forbidden access' });
-        }
-        const query = { email: userEmail };
-        const result = await cartsCollection.find(query).toArray();
-        res.send(result);
-      
-      
+      if (!userEmail) {
+        res.send([])
+      }
+
+      const decodedEmail = req.decoded.email
+
+      if (userEmail !== decodedEmail) {
+        return res.status(403).send({ error: true, message: 'Forbidden access' });
+      }
+      const query = { email: userEmail };
+      const result = await cartsCollection.find(query).toArray();
+      res.send(result);
+
+
     });
-    
-    
 
 
 
 
 
 
-    
+
+
+
     // app.get("/selectedClasses", async (req, res) => {
     //   let query = {};
     //   if (req.query?.email) {
@@ -274,18 +275,33 @@ const verifyAdmin = async(req,res,next) =>{
     // payment   
 
     app.post('/create-payment-intent', verifyJWT, async (req, res) => {
-      const { price } = req.body
-      const amount = price * 100;
-      const paymentIntent = await stripe.paymentIntents.create({
-        amount: amount,
-        currency: 'usd',
-        payment_method_types: ['card']
+      try {
+        const { price } = req.body;
+        const amount = parseInt(price * 100);
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount: amount,
+          currency: 'usd',
+          payment_method_types: ['card']
+        });
+        res.send({
+          clientSecret: paymentIntent.client_secret
+        });
+      } catch (error) {
+        res.status(500).send({ error: 'Failed to create payment intent' });
+      }
+    });
 
-      })
-      res.send({
-        clientSecret: paymentIntent.client_secret
-      })
+    app.post('/payments', verifyJWT, async (req, res) => {
+      const payment = req.body
+      const insertResult = await paymentsCollection.insertOne(payment)
+
+      const query = { _id: { $in: payment.cartsItems.map(id => new ObjectId(id)) } }
+      const deleteResult = await cartsCollection.deleteMany(query)
+
+
+      res.send({ insertResult, deleteResult })
     })
+
 
 
 
