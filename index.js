@@ -69,7 +69,7 @@ async function run() {
 
 
     app.get('/classes', async (req, res) => {
-      const result = await classesCollection.find().sort({ enrollmentCount: -1 }).limit(6).toArray();
+      const result = await classesCollection.find().sort({ enrolledCount: -1 }).limit(6).toArray();
       res.send(result);
     });
     app.get('/approveClasses', async (req, res) => {
@@ -107,10 +107,89 @@ async function run() {
 
     // admin
 
-    app.get('/manageClasses', async (req, res) => {
+    app.get('/manageClasses', verifyJWT, async (req, res) => {
       const result = await classesCollection.find().toArray();
       res.send(result);
     });
+
+
+
+    app.patch('/manageClasses/approve/:id', verifyJWT, async (req, res) => {
+      const { id } = req.params;
+
+      try {
+      
+        const filter = { _id: new ObjectId(id) };
+        const updateDoc = { $set: { status: 'approved' } };
+
+        const result = await classesCollection.updateOne(filter, updateDoc);
+
+        if (result.modifiedCount === 0) {
+          return res.status(404).json({ error: 'Class not found or already approved' });
+        }
+        res.status(200).json({ message: 'Class approved successfully' });
+      } catch (error) {
+        console.error('Error approving class:', error);
+        res.status(500).json({ error: 'An error occurred while approving the class' });
+      }
+    });
+
+
+
+    app.patch('/manageClasses/deny/:id', verifyJWT, async (req, res) => {
+      const { id } = req.params;
+
+      try {
+        const filter = { _id: new ObjectId(id) };
+        const updateDoc = { $set: { status: 'denied' } };
+
+        const result = await classesCollection.updateOne(filter, updateDoc);
+
+        if (result.modifiedCount === 0) {
+          return res.status(404).json({ error: 'Class not found or already denied' });
+        }
+        res.status(200).json({ message: 'Class denied successfully' });
+      } catch (error) {
+        console.error('Error denying class:', error);
+        res.status(500).json({ error: 'An error occurred while denying the class' });
+      }
+    });
+
+
+    app.post('/manageClasses/feedback/:id', verifyJWT, async (req, res) => {
+      const { id } = req.params;
+      const { feedback } = req.body;
+
+      try {
+        // Update the class with the provided feedback in the database
+        const updatedClass = await classesCollection.findOneAndUpdate(
+          { _id: new ObjectId(id) },
+          { $set: { feedback } },
+          { returnDocument: 'after' }
+        );
+
+        if (!updatedClass.value) {
+          // If the class doesn't exist, return an error response
+          return res.status(404).json({ error: 'Class not found' });
+        }
+
+        res.status(200).json(updatedClass.value);
+      } catch (error) {
+        console.error('Error updating class feedback:', error);
+        res.status(500).json({ error: 'An error occurred while updating class feedback' });
+      }
+    });
+
+
+
+
+
+
+
+
+
+
+
 
     app.post('/users', async (req, res) => {
       const user = req.body;
@@ -292,29 +371,133 @@ async function run() {
     });
 
     app.post('/payments', verifyJWT, async (req, res) => {
-      const payment = req.body
-      const insertResult = await paymentsCollection.insertOne(payment)
+      const payment = req.body;
 
-      const query = { _id: { $in: payment.cartsItems.map(id => new ObjectId(id)) } }
-      const deleteResult = await cartsCollection.deleteMany(query)
+      try {
+        // Store the payment information in the database
+        const insertResult = await paymentsCollection.insertOne(payment);
+
+        // Update the enrollment status and reduce available seats for each enrolled class
+        const classUpdatePromises = payment.classItems.map(async (classId) => {
+          const updateResult = await classesCollection.updateOne(
+            {
+              _id: new ObjectId(classId),
+              availableSeats: { $gt: 0 },
+              enrolledStudents: { $ne: payment.email }
+            },
+            {
+              $inc: {
+                availableSeats: -1,
+                enrolledCount: 1 // Increment the enrolledCount field by 1
+              },
+              $addToSet: { enrolledStudents: payment.email }
+            }
+          );
+          return updateResult;
+        });
+
+        const updateResults = await Promise.all(classUpdatePromises);
+
+        // Remove the cart items for the user
+        const deleteQuery = { _id: { $in: payment.cartsItems.map(id => new ObjectId(id)) } };
+        const deleteResult = await cartsCollection.deleteMany(deleteQuery);
+
+        res.send({ insertResult, updateResults, deleteResult });
+      } catch (error) {
+        res.status(500).send({ error: 'Failed to process payment' });
+      }
+    });
 
 
-      res.send({ insertResult, deleteResult })
-    })
+    app.get('/paymentHistory', verifyJWT, async (req, res) => {
+      const userEmail = req.query.email;
+      if (!userEmail) {
+        return res.send([]);
+      }
+
+      const decodedEmail = req.decoded.email;
+
+      if (userEmail !== decodedEmail) {
+        return res.status(403).send({ error: true, message: 'Forbidden access' });
+      }
+
+      const query = { email: userEmail };
+      const result = await paymentsCollection.find(query).sort({ date: -1 }).toArray();
+      res.send(result);
+    });
+
+
+
+    // enrolled
+
+    app.get('/enrolledClasses', verifyJWT, async (req, res) => {
+      try {
+        const userEmail = req.query.email;
+        if (!userEmail) {
+          res.send([]);
+        }
+        const decodedEmail = req.decoded.email;
+        if (userEmail !== decodedEmail) {
+          return res.status(403).send({ error: true, message: 'Forbidden access' });
+        }
+        const query = { enrolledStudents: { $elemMatch: { $eq: userEmail } } };
+
+        // Retrieve enrolled classes for the user with userEmail
+        const enrolledClasses = await classesCollection.find(query).toArray();
+
+        res.send(enrolledClasses);
+      } catch (error) {
+        console.log('Failed to fetch enrolled classes:', error);
+        res.status(500).send({ error: 'Failed to fetch enrolled classes' });
+      }
+    });
 
 
 
 
-    // app.get("/selectedClasses", async (req, res) => {
-    //   let query = {};
-    //   if (req.query?.email) {
-    //     query = { studentEmail: req.query.email };
-    //   }
 
-    //   const result = await cartsCollection.find(query).toArray();
-    //   res.send(result);
 
-    // });
+
+
+
+
+
+
+
+    // payment-page 
+
+
+
+
+
+
+
+
+    app.get('/classes/:id', verifyJWT, async (req, res) => {
+      const { id } = req.params;
+
+      try {
+        // Retrieve the class from the database
+        const enrolledClass = await classesCollection.findOne({ _id: ObjectId(id) });
+
+        if (!enrolledClass) {
+          // If the class doesn't exist, return an error response
+          return res.status(404).json({ error: 'Class not found' });
+        }
+
+        // Return the class information
+        return res.status(200).json(enrolledClass);
+      } catch (error) {
+        // Handle any errors that occurred during class retrieval
+        console.error(error);
+        return res.status(500).json({ error: 'An error occurred during class retrieval' });
+      }
+    });
+
+
+
+
+
 
     // Delete selected class
     app.delete("/selectedClasses/:classId", async (req, res) => {
