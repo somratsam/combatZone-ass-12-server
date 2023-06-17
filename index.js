@@ -353,7 +353,7 @@ async function run() {
       const payment = req.body;
 
       try {
-        // Store the payment information in the database
+        // Store the payment information 
         const insertResult = await paymentsCollection.insertOne(payment);
 
         // Update the enrollment status and reduce available seats for each enrolled class
@@ -436,22 +436,7 @@ async function run() {
 
 
 
-
-
-
-
-
-
-
     // payment-page 
-
-
-
-
-
-
-
-
     app.get('/classes/:id', verifyJWT, async (req, res) => {
       const { id } = req.params;
 
@@ -476,8 +461,6 @@ async function run() {
 
 
 
-
-
     // Delete selected class
     app.delete("/selectedClasses/:classId", async (req, res) => {
       const classId = req.params.classId;
@@ -489,9 +472,7 @@ async function run() {
 
     });
 
-
-
-
+    
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
