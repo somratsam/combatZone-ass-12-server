@@ -161,7 +161,6 @@ async function run() {
       const { feedback } = req.body;
 
       try {
-        // Update the class with the provided feedback in the database
         const updatedClass = await classesCollection.findOneAndUpdate(
           { _id: new ObjectId(id) },
           { $set: { feedback } },
@@ -169,7 +168,6 @@ async function run() {
         );
 
         if (!updatedClass.value) {
-          // If the class doesn't exist, return an error response
           return res.status(404).json({ error: 'Class not found' });
         }
 
@@ -326,32 +324,10 @@ async function run() {
       const query = { email: userEmail };
       const result = await cartsCollection.find(query).toArray();
       res.send(result);
-
-
     });
 
 
 
-
-
-
-
-
-
-    // app.get("/selectedClasses", async (req, res) => {
-    //   let query = {};
-    //   if (req.query?.email) {
-    //     query = { studentEmail: req.query.email };
-    //   }
-    //   // const decodedEmail = req.decoded.email;
-    //   // if (req.query.email !== decodedEmail) {
-    //   //   return res.status(403).send({ error: true, message: 'forbidden access' });
-    //   // }
-
-    //   const result = await cartsCollection.find(query).toArray();
-    //   res.send(result);
-    // });
-    // payment   
 
     app.post('/create-payment-intent', verifyJWT, async (req, res) => {
       try {
@@ -369,6 +345,9 @@ async function run() {
         res.status(500).send({ error: 'Failed to create payment intent' });
       }
     });
+
+
+    
 
     app.post('/payments', verifyJWT, async (req, res) => {
       const payment = req.body;
