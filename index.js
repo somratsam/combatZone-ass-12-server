@@ -204,14 +204,10 @@ async function run() {
 
     // admin-secure
 
-    app.get('/users/admin/:email', verifyJWT, async (req, res) => {
+    app.get('/users/admin/:email',  async (req, res) => {
       const email = req.params.email;
 
-      if (req.decoded.email !== email) {
-        res.send({ admin: false });
-        return;
-      }
-
+     
       const query = { email: email };
       const user = await usersCollection.findOne(query);
       const result = { admin: user?.role === 'admin' };
@@ -220,14 +216,10 @@ async function run() {
 
     // instructor-secure
 
-    app.get('/users/instructor/:email', verifyJWT, async (req, res) => {
+    app.get('/users/instructor/:email', async (req, res) => {
       const email = req.params.email;
 
-      if (req.decoded.email !== email) {
-        res.send({ instructor: false });
-        return;
-      }
-
+     
       const query = { email: email };
       const user = await usersCollection.findOne(query);
       const result = { instructor: user?.role === 'instructor' };
@@ -237,13 +229,9 @@ async function run() {
 
     // student-secure
 
-    app.get('/users/student/:email', verifyJWT, async (req, res) => {
+    app.get('/users/student/:email', async (req, res) => {
       const email = req.params.email;
 
-      if (req.decoded.email !== email) {
-        res.send({ student: false });
-        return;
-      }
 
       const query = { email: email };
       const user = await usersCollection.findOne(query);
